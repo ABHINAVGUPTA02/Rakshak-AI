@@ -4,9 +4,30 @@ from app.models.crime import CrimeRecord, Person, PersonRole
 
 
 def summarize_case(db: Session, crime_id: int) -> dict | None:
-    crime = db.query(CrimeRecord).filter(CrimeRecord.id == crime_id).first()
+    from sqlalchemy.orm import joinedload
+
+    crime = (
+        db.query(CrimeRecord)
+        .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
+        .filter(CrimeRecord.id == crime_id)
+        .first()
+    )
     if not crime:
         return None
+
+    from app.services.ingestion.fir_parser import ensure_crime_entities, ensure_crime_persons
+
+    if not crime.persons or not crime.entities:
+        ensure_crime_persons(db, crime)
+        ensure_crime_entities(db, crime)
+        crime = (
+            db.query(CrimeRecord)
+            .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
+            .filter(CrimeRecord.id == crime_id)
+            .first()
+        )
+        if not crime:
+            return None
 
     accused = [p.name for p in crime.persons if p.role == PersonRole.ACCUSED]
     victims = [p.name for p in crime.persons if p.role == PersonRole.VICTIM]
@@ -43,6 +64,10 @@ def summarize_case(db: Session, crime_id: int) -> dict | None:
         "summary": " ".join(summary_parts),
         "accused": accused,
         "victims": victims,
+        "entities": [
+            {"kind": e.kind.value, "value": e.value, "label": e.label}
+            for e in crime.entities
+        ],
         "repeat_offenders": repeat_offenders,
         "status": crime.status,
     }

@@ -7,6 +7,16 @@ interface UploadResult {
   type: string;
   records_ingested?: number;
   records_skipped?: number;
+  files_processed?: number;
+  file_results?: {
+    type?: string;
+    filename?: string;
+    records_ingested?: number;
+    success?: boolean;
+    stats?: Record<string, number>;
+    warnings?: string[];
+  }[];
+  dataset_roles?: string[];
   extraction_method?: string;
   characters_extracted?: number;
   text_preview?: string;
@@ -26,7 +36,44 @@ function formatUploadMessage(data: UploadResult): string {
   const ingested = data.records_ingested ?? 0;
   const parts: string[] = [];
 
-  if (data.type === 'document') {
+  if (data.type === 'archive') {
+    parts.push(`Processed ${data.files_processed ?? 0} file(s) from ZIP`);
+    const bundle = data.file_results?.find((r) => r.type === 'structured_bundle');
+    if (bundle?.stats) {
+      const bits = [
+        bundle.stats.firs ? `${bundle.stats.firs} FIRs` : '',
+        bundle.stats.persons ? `${bundle.stats.persons} persons` : '',
+        bundle.stats.links ? `${bundle.stats.links} links` : '',
+        bundle.stats.transactions ? `${bundle.stats.transactions} transactions` : '',
+        bundle.stats.calls ? `${bundle.stats.calls} calls` : '',
+      ].filter(Boolean);
+      if (bits.length) parts.push(bits.join(', '));
+    }
+    parts.push(`Ingested ${ingested} record(s) total`);
+    if (ingested === 0) {
+      parts.push('No records saved — check ZIP file names and FIR id/fir_number columns');
+    }
+    if (data.records_skipped) {
+      parts.push(`${data.records_skipped} skipped (duplicate or invalid)`);
+    }
+    if (bundle?.warnings?.length) {
+      parts.push(bundle.warnings.join(' '));
+    }
+  } else if (data.type === 'structured_bundle') {
+    const stats = (data as UploadResult & { stats?: Record<string, number> }).stats;
+    parts.push('Structured dataset imported');
+    if (stats) {
+      const bits = [
+        stats.firs ? `${stats.firs} FIRs` : '',
+        stats.persons ? `${stats.persons} persons` : '',
+        stats.links ? `${stats.links} person links` : '',
+        stats.transactions ? `${stats.transactions} transactions` : '',
+        stats.calls ? `${stats.calls} calls` : '',
+      ].filter(Boolean);
+      if (bits.length) parts.push(bits.join(', '));
+    }
+    parts.push(`Total ingested: ${ingested}`);
+  } else if (data.type === 'document') {
     parts.push(`Extracted via ${data.extraction_method || 'unknown'} (${data.characters_extracted ?? 0} chars)`);
     parts.push(`Ingested ${ingested} FIR record(s)`);
     if (data.record) {
@@ -53,7 +100,11 @@ export default function CrimeRecords() {
   const [uploadOk, setUploadOk] = useState<boolean | null>(null);
   const [uploadDetail, setUploadDetail] = useState('');
   const [selected, setSelected] = useState<number | null>(null);
-  const [summary, setSummary] = useState<{ summary: string; repeat_offenders: { name: string; case_count: number }[] } | null>(null);
+  const [summary, setSummary] = useState<{
+    summary: string;
+    repeat_offenders: { name: string; case_count: number }[];
+    entities?: { kind: string; value: string; label: string | null }[];
+  } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function loadRecords() {
@@ -116,13 +167,13 @@ export default function CrimeRecords() {
       <header className="page-header">
         <div>
           <h2>Crime Records</h2>
-          <p>Upload FIRs as CSV, Excel, PDF, or scanned images (OCR supported)</p>
+          <p>Upload FIRs as CSV, Excel, PDF, images, or a ZIP of multiple files</p>
         </div>
         <form onSubmit={handleUpload} className="upload-form">
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.tiff,.webp"
+            accept=".csv,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.tiff,.webp,.zip"
           />
           <button type="submit">Upload</button>
         </form>
@@ -178,6 +229,19 @@ export default function CrimeRecords() {
           <div className="panel summary-panel">
             <h3>Case Summary</h3>
             <p>{summary.summary}</p>
+            {summary.entities && summary.entities.length > 0 && (
+              <div className="evidence-trail">
+                <strong>Extracted Entities</strong>
+                <ul>
+                  {summary.entities.map((e, i) => (
+                    <li key={`${e.kind}-${e.value}-${i}`}>
+                      <span className="badge">{e.kind}</span> {e.value}
+                      {e.label ? ` — ${e.label}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {summary.repeat_offenders.length > 0 && (
               <div className="evidence-trail">
                 <strong>Repeat Offender Alert</strong>

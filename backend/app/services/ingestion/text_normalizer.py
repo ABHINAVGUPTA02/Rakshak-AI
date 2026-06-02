@@ -50,7 +50,7 @@ GLUE_FIXES = [
     (r"Accused(Adult|Minor)(Male|Female)", r"Accused \1 \2"),
     (r"Sl\.No\.(\d+)([A-Za-z])", r"Sl.No.\1 \2"),
     (r"(Male|Female)([A-Z#])", r"\1 \2"),
-    (r"Complainant/Informant", "Complainant/Informant"),
+    (r"Fax([a-zA-Z0-9._%+-]+@)", r"Fax \1"),
 ]
 
 

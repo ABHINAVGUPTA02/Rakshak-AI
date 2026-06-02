@@ -8,6 +8,9 @@ from app.api.v1.router import api_router
 from app.config import settings
 from app.db.neo4j import close_neo4j_driver
 from app.db.postgres import Base, engine
+import app.models.crime  # noqa: F401
+import app.models.entity  # noqa: F401
+import app.models.operational  # noqa: F401 — register tables for create_all
 
 logger = logging.getLogger(__name__)
 

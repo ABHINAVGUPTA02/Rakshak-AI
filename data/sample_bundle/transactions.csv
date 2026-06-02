@@ -1,0 +1,3 @@
+fir_id,amount,from_account,to_account,transaction_type,transaction_date
+1,15000,ACC1001,ACC9001,UPI,2025-01-10
+2,250000,ACC2002,ACC9002,NEFT,2025-02-01

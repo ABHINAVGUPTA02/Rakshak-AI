@@ -17,6 +17,8 @@ export const api = {
   getHotspots: () => request<Hotspot[]>('/analytics/hotspots'),
   getCrimes: () => request<CrimeRecord[]>('/crimes'),
   getNetwork: () => request<NetworkGraph>('/graph/network'),
+  syncGraph: () =>
+    request<{ synced: number; rebuilt: boolean }>('/graph/sync?rebuild=true', { method: 'POST' }),
   chat: (message: string, language = 'en', history: { role: string; content: string }[] = []) =>
     request<ChatResponse>('/chat', {
       method: 'POST',
@@ -49,9 +51,32 @@ export interface CrimeRecord {
   incident_date: string | null;
 }
 
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: string;
+  meta?: Record<string, string | null>;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  relationship: string;
+  label?: string;
+}
+
+export interface GraphInsights {
+  cases?: number;
+  people?: number;
+  phones?: number;
+  shared_phones?: number;
+  co_suspect_links?: number;
+}
+
 export interface NetworkGraph {
-  nodes: { id: string; label: string; type: string }[];
-  edges: { source: string; target: string; relationship: string }[];
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  insights?: GraphInsights;
 }
 
 export interface ChatResponse {

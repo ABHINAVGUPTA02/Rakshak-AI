@@ -398,15 +398,157 @@ tbody tr:hover {
 }
 
 .network-panel {
-  min-height: 520px;
+  min-height: 560px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  width: 100%;
+}
+
+.network-wrap {
+  position: relative;
+  width: 100%;
+  overflow: auto;
 }
 
 .network-svg {
   width: 100%;
-  max-width: 600px;
+  min-height: 420px;
+  display: block;
+}
+
+.node-label-bg {
+  fill: rgba(15, 23, 42, 0.92);
+  stroke: rgba(148, 163, 184, 0.35);
+  stroke-width: 1;
+}
+
+.edge-label {
+  paint-order: stroke;
+  stroke: rgba(15, 23, 42, 0.85);
+  stroke-width: 3px;
+}
+
+.graph-detail {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: min(260px, 90%);
+  padding: 1rem 1.1rem;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+
+.graph-detail-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.25rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.graph-detail-type {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.graph-detail h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  color: #f1f5f9;
+  line-height: 1.35;
+  padding-right: 1.25rem;
+}
+
+.graph-detail p {
+  margin: 0.2rem 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.graph-detail-meta {
+  color: #64748b !important;
+}
+
+.graph-detail-hint {
+  margin-top: 0.65rem !important;
+  font-size: 0.72rem !important;
+  color: #64748b !important;
+  font-style: italic;
+}
+
+.graph-node {
+  transition: opacity 0.15s ease;
+}
+
+.graph-insights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.graph-insights strong {
+  color: #e2e8f0;
+  margin-right: 0.2rem;
+}
+
+.insight-highlight {
+  color: #fbbf24;
+}
+
+.graph-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.sync-btn {
+  padding: 0.5rem 1rem;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.sync-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.legend-dash {
+  color: #64748b;
+  font-style: italic;
 }
 
 .legend {

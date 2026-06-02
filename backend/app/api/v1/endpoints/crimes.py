@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.postgres import get_db
 from app.models.crime import CrimeRecord
@@ -14,7 +14,12 @@ router = APIRouter()
 
 @router.get("", response_model=list[CrimeRecordResponse])
 def list_crimes(db: Session = Depends(get_db)):
-    return db.query(CrimeRecord).order_by(CrimeRecord.created_at.desc()).all()
+    return (
+        db.query(CrimeRecord)
+        .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
+        .order_by(CrimeRecord.created_at.desc())
+        .all()
+    )
 
 
 @router.get("/stats", response_model=CrimeStatsResponse)
@@ -24,7 +29,12 @@ def crime_stats(db: Session = Depends(get_db)):
 
 @router.get("/{crime_id}", response_model=CrimeRecordResponse)
 def get_crime(crime_id: int, db: Session = Depends(get_db)):
-    crime = db.query(CrimeRecord).filter(CrimeRecord.id == crime_id).first()
+    crime = (
+        db.query(CrimeRecord)
+        .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
+        .filter(CrimeRecord.id == crime_id)
+        .first()
+    )
     if not crime:
         raise HTTPException(status_code=404, detail="Crime record not found")
     return crime
@@ -50,7 +60,12 @@ def case_summary(crime_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{crime_id}/similar")
 def similar_cases(crime_id: int, db: Session = Depends(get_db), limit: int = 5):
-    crime = db.query(CrimeRecord).filter(CrimeRecord.id == crime_id).first()
+    crime = (
+        db.query(CrimeRecord)
+        .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
+        .filter(CrimeRecord.id == crime_id)
+        .first()
+    )
     if not crime:
         raise HTTPException(status_code=404, detail="Crime record not found")
     return find_similar_cases(db, crime_id, limit=limit)

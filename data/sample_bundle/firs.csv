@@ -1,0 +1,3 @@
+id,crime_type,district,police_station,description,status
+1,Theft,Bengaluru Urban,Koramangala,Mobile theft at bus stand,open
+2,Cyber Fraud,Bengaluru Urban,Electronic City,UPI fraud via fake link,open

@@ -2,6 +2,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.entity import EntityCreate, EntityResponse
+
 
 class PersonBase(BaseModel):
     name: str
@@ -34,12 +36,14 @@ class CrimeRecordBase(BaseModel):
 
 class CrimeRecordCreate(CrimeRecordBase):
     persons: list[PersonCreate] = Field(default_factory=list)
+    entities: list[EntityCreate] = Field(default_factory=list)
 
 
 class CrimeRecordResponse(CrimeRecordBase):
     id: int
     created_at: datetime
     persons: list[PersonResponse] = Field(default_factory=list)
+    entities: list[EntityResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

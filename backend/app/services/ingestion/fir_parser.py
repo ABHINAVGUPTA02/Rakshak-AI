@@ -10,11 +10,15 @@ from typing import TYPE_CHECKING
 from sqlalchemy.orm import Session
 
 from app.schemas.crime import CrimeRecordCreate, PersonCreate
+from app.schemas.entity import EntityCreate
+from app.services.ingestion.entity_extractor import extract_entities
 from app.services.ingestion.text_normalizer import normalize_ocr_text
 from app.services.intelligence.location_aliases import LOCATION_ALIASES, detect_locations_in_message
 
 if TYPE_CHECKING:
     from app.models.crime import CrimeRecord
+
+from app.models.entity import CrimeEntity, EntityKind
 
 # Karnataka district names for fuzzy recovery from OCR body text
 KARNATAKA_DISTRICTS = [
@@ -366,6 +370,38 @@ def _dedupe_persons(persons: list[PersonCreate]) -> list[PersonCreate]:
     return unique
 
 
+def _count_by_kind(entities: list[EntityCreate]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for ent in entities:
+        counts[ent.kind] = counts.get(ent.kind, 0) + 1
+    return counts
+
+
+def ensure_crime_entities(db: Session, crime: "CrimeRecord") -> "CrimeRecord":
+    """Backfill entities from FIR description when missing."""
+    if crime.entities:
+        return crime
+
+    body = crime.description or ""
+    body = re.sub(r"^\[Sections:[^\]]+\]\s*", "", body)
+    extracted = extract_entities(body)
+    if not extracted:
+        return crime
+
+    for ent in extracted:
+        crime.entities.append(
+            CrimeEntity(
+                kind=EntityKind(ent.kind),
+                value=ent.value,
+                label=ent.label,
+                role=ent.role,
+            )
+        )
+    db.commit()
+    db.refresh(crime)
+    return crime
+
+
 def ensure_crime_persons(db: Session, crime: "CrimeRecord") -> "CrimeRecord":
     """Backfill persons from FIR description when missing (existing uploads)."""
     from app.models.crime import Person, PersonRole
@@ -429,6 +465,7 @@ def parse_fir_from_text(text: str, source_filename: str = "") -> tuple[CrimeReco
     act_sections = extract_act_sections(normalized)
     crime_type = infer_crime_type(normalized)
     persons = extract_persons(normalized) or extract_persons(text)
+    entities = extract_entities(normalized) or extract_entities(text)
 
     # Last-resort district from location alias scan on full body
     if not district:
@@ -452,6 +489,7 @@ def parse_fir_from_text(text: str, source_filename: str = "") -> tuple[CrimeReco
         incident_date=incident_date,
         status="open",
         persons=persons,
+        entities=entities,
     )
 
     metadata = {
@@ -465,6 +503,8 @@ def parse_fir_from_text(text: str, source_filename: str = "") -> tuple[CrimeReco
             "incident_date": incident_date.isoformat() if incident_date else None,
             "act_sections": act_sections,
             "persons_found": len(persons),
+            "entities_found": len(entities),
+            "entities_by_kind": _count_by_kind(entities),
         },
         "field_confidence": _field_confidence(
             fir_number=None if generated else fir_number,

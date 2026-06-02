@@ -1,10 +1,14 @@
 import enum
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.postgres import Base
+
+if TYPE_CHECKING:
+    from app.models.entity import CrimeEntity
 
 
 class PersonRole(str, enum.Enum):
@@ -28,7 +32,8 @@ class CrimeRecord(Base):
     status: Mapped[str] = mapped_column(String(64), default="open")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    persons: Mapped[list["Person"]] = relationship(back_populates="crime_record")
+    persons: Mapped[list["Person"]] = relationship(back_populates="crime_record", cascade="all, delete-orphan")
+    entities: Mapped[list["CrimeEntity"]] = relationship(back_populates="crime_record", cascade="all, delete-orphan")
 
 
 class Person(Base):
