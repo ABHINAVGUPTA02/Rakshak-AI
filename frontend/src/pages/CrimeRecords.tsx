@@ -3,10 +3,55 @@ import { api, type CrimeRecord } from '../api/client';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
+interface UploadResult {
+  type: string;
+  records_ingested?: number;
+  records_skipped?: number;
+  extraction_method?: string;
+  characters_extracted?: number;
+  text_preview?: string;
+  parsed_fields?: Record<string, string | number | null>;
+  warnings?: string[];
+  message?: string;
+  success?: boolean;
+  graph_synced?: boolean;
+  record?: { fir_number: string; crime_type: string; district: string };
+}
+
+function formatUploadMessage(data: UploadResult): string {
+  if (data.type === 'unsupported') {
+    return data.message || 'Unsupported file type';
+  }
+
+  const ingested = data.records_ingested ?? 0;
+  const parts: string[] = [];
+
+  if (data.type === 'document') {
+    parts.push(`Extracted via ${data.extraction_method || 'unknown'} (${data.characters_extracted ?? 0} chars)`);
+    parts.push(`Ingested ${ingested} FIR record(s)`);
+    if (data.record) {
+      parts.push(`Saved: ${data.record.fir_number} — ${data.record.crime_type}, ${data.record.district}`);
+    }
+  } else {
+    parts.push(`Ingested ${ingested} record(s)`);
+    if (data.records_skipped) {
+      parts.push(`${data.records_skipped} skipped (duplicate or missing FIR number)`);
+    }
+  }
+
+  if (data.warnings?.length) {
+    parts.push(`Note: ${data.warnings.join(' ')}`);
+  }
+
+  return parts.join('. ');
+}
+
 export default function CrimeRecords() {
   const [records, setRecords] = useState<CrimeRecord[]>([]);
   const [error, setError] = useState('');
   const [uploadMsg, setUploadMsg] = useState('');
+  const [uploadOk, setUploadOk] = useState<boolean | null>(null);
+  const [uploadDetail, setUploadDetail] = useState('');
   const [selected, setSelected] = useState<number | null>(null);
   const [summary, setSummary] = useState<{ summary: string; repeat_offenders: { name: string; case_count: number }[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -28,15 +73,31 @@ export default function CrimeRecords() {
 
     const form = new FormData();
     form.append('file', file);
-    setUploadMsg('Uploading...');
+    setUploadMsg('Processing...');
+    setUploadDetail('');
+    setUploadOk(null);
+    setError('');
 
     try {
       const res = await fetch(`${API_BASE}/ingest/upload`, { method: 'POST', body: form });
-      const data = await res.json();
-      setUploadMsg(`Ingested ${data.records_ingested ?? 0} records`);
+      const data: UploadResult = await res.json();
+      if (!res.ok) {
+        setUploadMsg('Upload failed');
+        setUploadOk(false);
+        setError(data.message || 'Server rejected the upload');
+        return;
+      }
+      const ingested = data.records_ingested ?? 0;
+      setUploadOk(data.success ?? ingested > 0);
+      setUploadMsg(formatUploadMessage(data));
+      if (data.text_preview) {
+        setUploadDetail(data.text_preview);
+      }
       loadRecords();
+      if (fileRef.current) fileRef.current.value = '';
     } catch {
-      setUploadMsg('Upload failed');
+      setUploadMsg('Upload failed — is the backend running?');
+      setUploadOk(false);
     }
   }
 
@@ -55,16 +116,28 @@ export default function CrimeRecords() {
       <header className="page-header">
         <div>
           <h2>Crime Records</h2>
-          <p>FIR database — searchable crime intelligence records</p>
+          <p>Upload FIRs as CSV, Excel, PDF, or scanned images (OCR supported)</p>
         </div>
         <form onSubmit={handleUpload} className="upload-form">
-          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.pdf" />
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.tiff,.webp"
+          />
           <button type="submit">Upload</button>
         </form>
       </header>
 
       {error && <div className="alert">{error}</div>}
-      {uploadMsg && <div className="alert success">{uploadMsg}</div>}
+      {uploadMsg && (
+        <div className={`alert ${uploadOk ? 'success' : 'warning'}`}>{uploadMsg}</div>
+      )}
+      {uploadDetail && (
+        <div className="panel ocr-preview">
+          <h3>Extracted Text Preview</h3>
+          <pre>{uploadDetail}</pre>
+        </div>
+      )}
 
       <div className="records-layout">
         <div className="panel table-panel">

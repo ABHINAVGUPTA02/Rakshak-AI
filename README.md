@@ -208,4 +208,30 @@ App: http://localhost:5173
 | GET | `/api/v1/analytics/hotspots` | District hotspots |
 | GET | `/api/v1/graph/network` | Knowledge graph data |
 | POST | `/api/v1/chat` | Intelligence assistant |
-| POST | `/api/v1/ingest/upload` | Upload Excel/PDF data |
+| POST | `/api/v1/ingest/upload` | Upload CSV, Excel, PDF, or image (OCR) |
+
+## OCR & Document Ingestion
+
+Rakshak AI supports multiple FIR data sources:
+
+| Source | Processing |
+|--------|------------|
+| CSV / Excel | Structured column mapping |
+| PDF (text) | Native text extraction |
+| PDF (scanned) | OCR via Tesseract |
+| Images (JPG, PNG, TIFF) | OCR via Tesseract |
+
+### OCR setup (macOS)
+
+```bash
+brew install tesseract tesseract-lang
+```
+
+Configure languages in `.env` (English + Kannada by default):
+
+```bash
+OCR_LANGUAGES=eng+kan
+OCR_DPI=300
+```
+
+When a FIR number cannot be read from the document, a temporary ID like `FIR/OCR/AB12CD34` is assigned. Parsed fields (district, crime type, accused/victim) are extracted automatically and can be reviewed in the Crime Records table.

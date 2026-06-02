@@ -164,6 +164,12 @@ nav {
   color: #4ade80;
 }
 
+.alert.warning {
+  background: #451a03;
+  border-color: #92400e;
+  color: #fbbf24;
+}
+
 .upload-form {
   display: flex;
   gap: 0.5rem;
@@ -474,6 +480,26 @@ td {
   color: #64748b;
   padding: 2rem;
   font-size: 0.9rem;
+}
+
+.ocr-preview {
+  margin-bottom: 1rem;
+}
+
+.ocr-preview h3 {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  margin-bottom: 0.5rem;
+}
+
+.ocr-preview pre {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+  line-height: 1.5;
 }
 
 @media (max-width: 768px) {
