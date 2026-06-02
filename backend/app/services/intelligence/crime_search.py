@@ -5,14 +5,17 @@ from __future__ import annotations
 import re
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.crime import CrimeRecord
+from app.services.intelligence.location_aliases import expand_location_terms
 
 STOP_WORDS = {
     "a", "an", "the", "is", "are", "was", "were", "what", "who", "how", "when",
-    "where", "tell", "me", "about", "show", "find", "give", "latest", "recent",
-    "uploaded", "fir", "case", "crime", "record", "records", "details", "summary",
+    "where", "tell", "me", "about", "show", "find", "give", "can", "you", "please",
+    "any", "all", "this", "that", "these", "those", "and", "or", "for", "with",
+    "crime", "crimes", "case", "cases", "incident", "incidents", "there", "have",
+    "has", "had", "been", "being", "from", "into", "over", "under", "also",
 }
 
 
@@ -21,19 +24,20 @@ def _keywords(message: str) -> list[str]:
     return [t for t in tokens if t not in STOP_WORDS]
 
 
-def search_crimes(db: Session, message: str, limit: int = 5) -> list[CrimeRecord]:
+def search_crimes(db: Session, message: str, limit: int = 8) -> list[CrimeRecord]:
     message = message.strip()
     if not message:
-        return []
+        return get_recent_crimes(db, limit)
 
     fir_match = re.search(
-        r"(?:FIR[/\s-]*)?(\d{1,5}/\d{4}(?:/\d+)?|FIR/\d{4}/\d+|FIR/OCR/[A-Z0-9]+)",
+        r"(FIR/OCR/[A-Z0-9]+|FIR/\d{4}/\d+|\d{1,5}/\d{4}(?:/\d+)?)",
         message,
         re.IGNORECASE,
     )
     if fir_match:
         by_fir = (
             db.query(CrimeRecord)
+            .options(joinedload(CrimeRecord.persons))
             .filter(CrimeRecord.fir_number.ilike(f"%{fir_match.group(1)}%"))
             .limit(limit)
             .all()
@@ -42,29 +46,46 @@ def search_crimes(db: Session, message: str, limit: int = 5) -> list[CrimeRecord
             return by_fir
 
     keywords = _keywords(message)
-    if not keywords:
-        return get_recent_crimes(db, limit)
-
+    location_terms = expand_location_terms(message)
     filters = []
-    for word in keywords[:6]:
-        pattern = f"%{word}%"
+
+    if keywords:
+        for word in keywords[:8]:
+            pattern = f"%{word}%"
+            filters.extend(
+                [
+                    CrimeRecord.fir_number.ilike(pattern),
+                    CrimeRecord.crime_type.ilike(pattern),
+                    CrimeRecord.district.ilike(pattern),
+                    CrimeRecord.police_station.ilike(pattern),
+                    CrimeRecord.description.ilike(pattern),
+                    CrimeRecord.status.ilike(pattern),
+                ]
+            )
+
+    for term in location_terms[:12]:
+        pattern = f"%{term}%"
         filters.extend(
             [
-                CrimeRecord.fir_number.ilike(pattern),
-                CrimeRecord.crime_type.ilike(pattern),
                 CrimeRecord.district.ilike(pattern),
                 CrimeRecord.police_station.ilike(pattern),
                 CrimeRecord.description.ilike(pattern),
             ]
         )
 
-    return (
-        db.query(CrimeRecord)
-        .filter(or_(*filters))
-        .order_by(CrimeRecord.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    if filters:
+        results = (
+            db.query(CrimeRecord)
+            .options(joinedload(CrimeRecord.persons))
+            .filter(or_(*filters))
+            .order_by(CrimeRecord.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        if results:
+            return results
+
+    return []
 
 
 def get_recent_crimes(db: Session, limit: int = 5) -> list[CrimeRecord]:

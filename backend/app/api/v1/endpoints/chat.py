@@ -9,5 +9,5 @@ router = APIRouter()
 
 
 @router.post("", response_model=ChatResponse)
-def chat(payload: ChatRequest, db: Session = Depends(get_db)):
-    return answer_query(db, payload.message, payload.language)
+async def chat(payload: ChatRequest, db: Session = Depends(get_db)):
+    return await answer_query(db, payload.message, payload.language, payload.history)

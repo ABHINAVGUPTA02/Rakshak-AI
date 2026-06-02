@@ -17,10 +17,10 @@ export const api = {
   getHotspots: () => request<Hotspot[]>('/analytics/hotspots'),
   getCrimes: () => request<CrimeRecord[]>('/crimes'),
   getNetwork: () => request<NetworkGraph>('/graph/network'),
-  chat: (message: string, language = 'en') =>
+  chat: (message: string, language = 'en', history: { role: string; content: string }[] = []) =>
     request<ChatResponse>('/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, language }),
+      body: JSON.stringify({ message, language, history }),
     }),
 };
 

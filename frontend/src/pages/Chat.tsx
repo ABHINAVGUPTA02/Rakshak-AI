@@ -12,7 +12,7 @@ export default function Chat() {
     {
       role: 'assistant',
       content:
-        'Welcome to Rakshak AI Intelligence Assistant. Ask about crime hotspots, types, networks, or case patterns in English or Kannada.',
+        'I\'m your investigative reasoning agent. Ask naturally — e.g. "crimes in Bangalore", "what happened in Tumakuru", or "summarize recent FIRs". I search live records and explain what I find.',
     },
   ]);
   const [input, setInput] = useState('');
@@ -25,11 +25,16 @@ export default function Chat() {
 
     const userMessage = input.trim();
     setInput('');
+    const historyForApi = [...messages.filter((m) => m.role === 'user' || m.role === 'assistant'), { role: 'user' as const, content: userMessage }];
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setLoading(true);
 
     try {
-      const response = await api.chat(userMessage, language);
+      const response = await api.chat(
+        userMessage,
+        language,
+        historyForApi.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+      );
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: response.reply, evidence: response.evidence },
@@ -61,7 +66,7 @@ export default function Chat() {
         <div className="chat-messages">
           {messages.map((msg, i) => (
             <div key={i} className={`chat-bubble ${msg.role}`}>
-              <p>{msg.content}</p>
+              <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
               {msg.evidence && msg.evidence.length > 0 && (
                 <div className="evidence-trail">
                   <strong>Evidence Trail</strong>
@@ -83,7 +88,7 @@ export default function Chat() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about hotspots, networks, crime types..."
+            placeholder="Ask anything about your crime records..."
           />
           <button type="submit" disabled={loading}>
             Send
