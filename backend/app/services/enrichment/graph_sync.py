@@ -51,6 +51,9 @@ INVESTIGATION_RELATIONSHIPS = frozenset(
         "CALL_RECORD",
         "CALLER",
         "RECEIVER",
+        "SHARED_PHONE",
+        "SHARED_ACCOUNT",
+        "SHARED_PERSON",
     }
 )
 
@@ -72,6 +75,9 @@ RELATIONSHIP_LABELS: dict[str, str] = {
     "CALL_RECORD": "call log",
     "CALLER": "caller",
     "RECEIVER": "receiver",
+    "SHARED_PHONE": "same phone",
+    "SHARED_ACCOUNT": "same account",
+    "SHARED_PERSON": "same person",
 }
 
 KIND_TO_LABEL = {
@@ -440,6 +446,35 @@ def sync_crime_to_graph(db: Session, crime_id: int) -> bool:
         return False
 
 
+def link_cross_case_connections() -> None:
+    """Connect cases that share phones, accounts, or persons (visible cross-case links)."""
+    with neo4j_session() as session:
+        session.run(
+            """
+            MATCH (c1:Crime)-[:USES_PHONE]->(p:Phone)<-[:USES_PHONE]-(c2:Crime)
+            WHERE c1.fir_number < c2.fir_number
+            MERGE (c1)-[r:SHARED_PHONE]->(c2)
+            SET r.value = p.value
+            """
+        )
+        session.run(
+            """
+            MATCH (c1:Crime)-[:FINANCIAL_LINK]->(a:Account)<-[:FINANCIAL_LINK]-(c2:Crime)
+            WHERE c1.fir_number < c2.fir_number
+            MERGE (c1)-[r:SHARED_ACCOUNT]->(c2)
+            SET r.value = a.value
+            """
+        )
+        session.run(
+            """
+            MATCH (p:Person)-[:INVOLVED_IN]->(c1:Crime), (p)-[:INVOLVED_IN]->(c2:Crime)
+            WHERE c1.fir_number < c2.fir_number
+            MERGE (c1)-[r:SHARED_PERSON]->(c2)
+            SET r.name = p.name
+            """
+        )
+
+
 def sync_all_crimes(db: Session, *, rebuild: bool = False) -> int:
     if rebuild:
         clear_graph()
@@ -457,6 +492,7 @@ def sync_all_crimes(db: Session, *, rebuild: bool = False) -> int:
     for crime in crimes:
         if sync_crime_to_graph(db, crime.id):
             synced += 1
+    link_cross_case_connections()
     return synced
 
 
@@ -545,8 +581,27 @@ def get_network_graph(limit: int = 500, view: str = "investigation") -> dict:
         logger.warning("Failed to fetch network graph: %s", exc)
         return {"nodes": [], "edges": [], "insights": {}}
 
+    _enrich_person_labels(nodes, edges)
+
     insights = _compute_insights(nodes, edges)
     return {"nodes": list(nodes.values()), "edges": edges, "insights": insights}
+
+
+def _enrich_person_labels(nodes: dict, edges: list) -> None:
+    """Append role to person node labels from INVOLVED_IN edges."""
+    roles_by_person: dict[str, list[str]] = {}
+    for edge in edges:
+        if edge["relationship"] != "INVOLVED_IN":
+            continue
+        if edge["source"].startswith("person:") and edge["target"].startswith("crime:"):
+            roles_by_person.setdefault(edge["source"], []).append(edge["label"] or "")
+    for pid, roles in roles_by_person.items():
+        if pid not in nodes:
+            continue
+        unique = [r for r in dict.fromkeys(roles) if r]
+        if unique:
+            nodes[pid]["label"] = f"{nodes[pid]['label']} ({', '.join(unique)})"
+            nodes[pid]["meta"] = {**(nodes[pid].get("meta") or {}), "roles": ", ".join(unique)}
 
 
 def _compute_insights(nodes: dict, edges: list) -> dict:

@@ -494,6 +494,55 @@ tbody tr:hover {
   transition: opacity 0.15s ease;
 }
 
+.network-svg-detailed {
+  min-height: 520px;
+}
+
+.rel-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1.25rem;
+  margin-bottom: 1rem;
+  padding: 0.65rem 1rem;
+  background: rgba(15, 23, 42, 0.75);
+  border-radius: 8px;
+  border: 1px solid rgba(71, 85, 105, 0.4);
+}
+
+.rel-legend-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  margin-right: 0.25rem;
+}
+
+.rel-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+}
+
+.edge-label-bg {
+  fill: rgba(15, 23, 42, 0.92);
+  stroke: rgba(71, 85, 105, 0.5);
+  stroke-width: 1;
+}
+
+.edge-label-text {
+  paint-order: stroke;
+  stroke: rgba(15, 23, 42, 0.9);
+  stroke-width: 2px;
+}
+
+.graph-node-detailed {
+  pointer-events: none;
+}
+
 .graph-insights {
   display: flex;
   flex-wrap: wrap;
