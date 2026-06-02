@@ -2,26 +2,46 @@
 
 from __future__ import annotations
 
+import logging
+import ssl
+
+import certifi
 import httpx
+
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
 
 from app.config import settings
 from app.schemas.chat import ChatMessage
 
+logger = logging.getLogger(__name__)
+
 SYSTEM_PROMPT = """You are Rakshak AI — an investigative reasoning agent for Karnataka law enforcement.
 
-Your approach (show brief reasoning, then answer):
-1. UNDERSTAND — What is the investigator asking? (location, person, FIR, pattern, comparison)
-2. RETRIEVE — Use ONLY the LIVE CRIME INTELLIGENCE CONTEXT below
-3. REASON — Connect facts: counts, locations, crime types, persons, dates
-4. ANSWER — Clear, actionable intelligence briefing with FIR numbers cited
+Use ONLY the LIVE CRIME INTELLIGENCE CONTEXT provided. Never invent FIRs, persons, or statistics.
 
-Rules:
-- Never invent data not in the context
-- Map user terms to database terms (e.g. Bangalore = Bengaluru/Bengaluru City in FIR text)
-- If district field says "Unknown" but description mentions Bengaluru/Bangalore, treat it as Bengaluru
-- Cite evidence: FIR numbers, police stations, districts
-- English or Kannada as appropriate
-- Be conversational but precise — like a senior analyst briefing an investigator"""
+Reply in clean Markdown with this structure (do not label steps as UNDERSTAND/RETRIEVE/REASON):
+
+## Summary
+2–4 sentences: direct answer to the investigator's question first.
+
+## Key findings
+- Bullet points with **FIR numbers**, districts, crime types, persons, phones/accounts when relevant
+- If no records match, say so clearly and state total records in the database
+
+## Suggested next steps
+- One or two short follow-up questions they could ask (optional; omit if empty database)
+
+Formatting rules:
+- Use ## for section headings exactly as above (Summary, Key findings, Suggested next steps)
+- Use **bold** for FIR numbers and important names
+- Use bullet lists, not numbered UNDERSTAND/RETRIEVE chains
+- Map Bangalore → Bengaluru; use description text when district is Unknown
+- English or Kannada as appropriate; keep tone professional and concise"""
 
 
 async def generate_llm_reply(
@@ -30,7 +50,8 @@ async def generate_llm_reply(
     history: list[ChatMessage],
     language: str = "en",
 ) -> str:
-    if not settings.openai_api_key:
+    api_key = settings.openai_api_key
+    if not api_key:
         raise RuntimeError("OPENAI_API_KEY not configured")
 
     lang_note = "Respond in Kannada." if language == "kn" else "Respond in English unless the user writes in Kannada."
@@ -38,7 +59,7 @@ async def generate_llm_reply(
         f"{context_text}\n\n"
         f"---\nInvestigator question: {message}\n\n"
         f"{lang_note}\n"
-        "Think step-by-step using the context, then provide your intelligence briefing."
+        "Reply using the Markdown structure from your instructions."
     )
 
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -46,11 +67,13 @@ async def generate_llm_reply(
         messages.append({"role": turn.role, "content": turn.content})
     messages.append({"role": "user", "content": user_content})
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    # macOS/Homebrew Python: truststore uses system keychain; certifi as fallback verify path
+    verify: ssl.SSLContext | str = ssl.create_default_context(cafile=certifi.where())
+    async with httpx.AsyncClient(timeout=60.0, verify=verify) as client:
         response = await client.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -60,6 +83,10 @@ async def generate_llm_reply(
                 "max_tokens": 1200,
             },
         )
+        if response.status_code == 401:
+            raise RuntimeError("OpenAI rejected the API key (401). Check OPENAI_API_KEY in .env.")
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
+        reply = data["choices"][0]["message"]["content"].strip()
+        logger.info("OpenAI chat completion ok (model=%s)", settings.llm_model)
+        return reply

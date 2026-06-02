@@ -21,3 +21,4 @@ class ChatResponse(BaseModel):
     reply: str
     evidence: list[EvidenceItem] = Field(default_factory=list)
     suggested_queries: list[str] = Field(default_factory=list)
+    mode: str = "local"  # "llm" when OpenAI succeeds, "local" for template agent

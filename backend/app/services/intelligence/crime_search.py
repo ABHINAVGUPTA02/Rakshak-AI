@@ -37,7 +37,7 @@ def search_crimes(db: Session, message: str, limit: int = 8) -> list[CrimeRecord
     if fir_match:
         by_fir = (
             db.query(CrimeRecord)
-            .options(joinedload(CrimeRecord.persons))
+            .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
             .filter(CrimeRecord.fir_number.ilike(f"%{fir_match.group(1)}%"))
             .limit(limit)
             .all()
@@ -76,7 +76,7 @@ def search_crimes(db: Session, message: str, limit: int = 8) -> list[CrimeRecord
     if filters:
         results = (
             db.query(CrimeRecord)
-            .options(joinedload(CrimeRecord.persons))
+            .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
             .filter(or_(*filters))
             .order_by(CrimeRecord.created_at.desc())
             .limit(limit)
@@ -89,7 +89,13 @@ def search_crimes(db: Session, message: str, limit: int = 8) -> list[CrimeRecord
 
 
 def get_recent_crimes(db: Session, limit: int = 5) -> list[CrimeRecord]:
-    return db.query(CrimeRecord).order_by(CrimeRecord.created_at.desc()).limit(limit).all()
+    return (
+        db.query(CrimeRecord)
+        .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
+        .order_by(CrimeRecord.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def format_crime_for_chat(crime: CrimeRecord) -> str:
@@ -107,4 +113,7 @@ def format_crime_for_chat(crime: CrimeRecord) -> str:
     if crime.persons:
         names = ", ".join(f"{p.name} ({p.role.value})" for p in crime.persons[:4])
         parts.append(f"Persons: {names}")
+    if crime.entities:
+        ents = ", ".join(f"{e.kind.value}:{e.value}" for e in crime.entities[:6])
+        parts.append(f"Entities: {ents}")
     return " | ".join(parts)

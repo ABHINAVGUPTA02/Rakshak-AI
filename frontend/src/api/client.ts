@@ -83,4 +83,5 @@ export interface ChatResponse {
   reply: string;
   evidence: { source: string; detail: string }[];
   suggested_queries: string[];
+  mode?: string;
 }

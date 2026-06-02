@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -29,6 +30,13 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
+
+    @field_validator("openai_api_key", mode="before")
+    @classmethod
+    def normalize_openai_api_key(cls, value: object) -> str:
+        if not isinstance(value, str):
+            return ""
+        return value.strip().strip('"').strip("'")
 
     ocr_languages: str = "eng+kan"
     ocr_dpi: int = 300

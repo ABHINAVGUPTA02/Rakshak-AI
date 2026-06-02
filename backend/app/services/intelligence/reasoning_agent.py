@@ -14,6 +14,7 @@ from app.schemas.chat import ChatResponse, EvidenceItem
 from app.services.intelligence.context_builder import get_crime_stats, get_hotspots
 from app.services.intelligence.crime_search import format_crime_for_chat, get_recent_crimes, search_crimes
 from app.services.intelligence.location_aliases import detect_locations_in_message, expand_location_terms
+from app.services.intelligence.reply_formatter import to_markdown_reply
 
 
 class QueryIntent(str, Enum):
@@ -77,7 +78,7 @@ def retrieve_records(db: Session, message: str, intent: QueryIntent, limit: int 
             if filters:
                 loc_results = (
                     db.query(CrimeRecord)
-                    .options(joinedload(CrimeRecord.persons))
+                    .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
                     .filter(or_(*filters))
                     .order_by(CrimeRecord.created_at.desc())
                     .limit(limit)
@@ -94,7 +95,7 @@ def retrieve_records(db: Session, message: str, intent: QueryIntent, limit: int 
             filters = [Person.name.ilike(f"%{t}%") for t in name_tokens[:4]]
             person_results = (
                 db.query(CrimeRecord)
-                .options(joinedload(CrimeRecord.persons))
+                .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
                 .join(Person)
                 .filter(or_(*filters))
                 .order_by(CrimeRecord.created_at.desc())
@@ -121,9 +122,15 @@ def synthesize_reply(
 
     if stats["total_crimes"] == 0:
         msg = (
-            "No crime records in the database yet. Upload FIRs via the Crime Records page."
+            "## Summary\n"
+            "There are **no crime records** in the database yet.\n\n"
+            "## Key findings\n"
+            "- Upload FIRs (CSV, Excel, PDF, or ZIP) via the **Crime Records** page.\n"
+            "- After upload, ask about locations, FIR numbers, or persons.\n\n"
+            "## Suggested next steps\n"
+            "- Upload your dataset, then ask: *\"How many records are loaded?\"*"
             if language != "kn"
-            else "ಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ದಾಖಲೆಗಳಿಲ್ಲ. Crime Records ನಿಂದ FIR ಅಪ್‌ಲೋಡ್ ಮಾಡಿ."
+            else "## Summary\nಡೇಟಾಬೇಸ್‌ನಲ್ಲಿ ಯಾವುದೇ ದಾಖಲೆಗಳಿಲ್ಲ.\n\n## Key findings\n- Crime Records ಪುಟದಿಂದ FIR ಅಪ್‌ಲೋಡ್ ಮಾಡಿ."
         )
         return msg, evidence
 
@@ -232,10 +239,13 @@ def run_reasoning_agent(db: Session, message: str, language: str = "en") -> Chat
     intent = detect_intent(message)
     records = retrieve_records(db, message, intent)
     reply, evidence = synthesize_reply(message, intent, records, db, language)
+    if not reply.strip().startswith("##"):
+        reply = to_markdown_reply(reply)
     return ChatResponse(
         reply=reply,
         evidence=evidence,
         suggested_queries=_suggestions(records, intent),
+        mode="local",
     )
 
 

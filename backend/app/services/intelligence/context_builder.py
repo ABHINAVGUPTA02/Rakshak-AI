@@ -94,7 +94,7 @@ def _search_persons(db: Session, message: str, limit: int = 5) -> list[CrimeReco
     filters = [Person.name.ilike(f"%{t}%") for t in tokens[:4]]
     return (
         db.query(CrimeRecord)
-        .options(joinedload(CrimeRecord.persons))
+        .options(joinedload(CrimeRecord.persons), joinedload(CrimeRecord.entities))
         .join(Person)
         .filter(or_(*filters))
         .order_by(CrimeRecord.created_at.desc())
