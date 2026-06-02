@@ -1,0 +1,4 @@
+fir_number,crime_type,description,district,police_station,latitude,longitude,status
+FIR/2025/001,Theft,Chain snatching incident,Bengaluru Urban,Koramangala,12.9352,77.6245,open
+FIR/2025/002,Assault,Bar fight escalation,Mysuru,Nazarbad,12.3051,76.6556,open
+FIR/2025/003,Cyber Fraud,OTP phishing scam,Bengaluru Urban,Indiranagar,12.9784,77.6408,closed
