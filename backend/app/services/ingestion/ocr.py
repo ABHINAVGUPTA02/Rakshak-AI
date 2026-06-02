@@ -138,9 +138,16 @@ def extract_text_from_pdf(content: bytes, languages: str | None = None) -> Extra
 
 
 def extract_text_from_document(content: bytes, suffix: str) -> ExtractionResult:
+    from app.services.ingestion.text_normalizer import normalize_ocr_text
+
     suffix = suffix.lower()
     if suffix == ".pdf":
-        return extract_text_from_pdf(content)
-    if suffix in IMAGE_EXTENSIONS:
-        return extract_text_from_image(content)
-    raise ValueError(f"Unsupported document type for OCR: {suffix}")
+        result = extract_text_from_pdf(content)
+    elif suffix in IMAGE_EXTENSIONS:
+        result = extract_text_from_image(content)
+    else:
+        raise ValueError(f"Unsupported document type for OCR: {suffix}")
+
+    if result.text.strip():
+        result.text = normalize_ocr_text(result.text)
+    return result

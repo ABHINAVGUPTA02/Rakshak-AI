@@ -10,7 +10,13 @@ from sqlalchemy.orm import Session
 from app.models.crime import CrimeRecord, Person, PersonRole
 from app.schemas.crime import CrimeRecordCreate
 from app.services.enrichment.graph_sync import sync_crime_to_graph
-from app.services.ingestion.fir_parser import parse_fir_from_text
+from app.services.ingestion.fir_parser import (
+    extract_district,
+    extract_incident_date,
+    extract_police_station,
+    infer_crime_type,
+    parse_fir_from_text,
+)
 from app.services.ingestion.ocr import IMAGE_EXTENSIONS, extract_text_from_document
 
 logger = logging.getLogger(__name__)
@@ -62,10 +68,44 @@ def _sync_created_records(db: Session, created: list[CrimeRecord]) -> dict[str, 
     return status
 
 
+def _enrich_row_from_text(row: dict) -> dict:
+    """Fill missing spreadsheet fields from description / combined row text."""
+    description = str(row.get("description", "") or "")
+    combined = " ".join(str(row.get(k, "") or "") for k in ("description", "police_station", "district", "crime_type"))
+    if not combined.strip():
+        return row
+
+    district = str(row.get("district", "") or "").strip()
+    if not district or district.lower() in {"unknown", "na", "n/a", ""}:
+        inferred = extract_district(combined) or extract_district(description)
+        if inferred:
+            row["district"] = inferred
+
+    ps = str(row.get("police_station", "") or "").strip()
+    if not ps:
+        inferred_ps = extract_police_station(combined)
+        if inferred_ps:
+            row["police_station"] = inferred_ps
+
+    crime_type = str(row.get("crime_type", "") or "").strip()
+    if not crime_type or crime_type.lower() in {"unknown", "na", "n/a", ""}:
+        inferred_type = infer_crime_type(combined)
+        if inferred_type != "Unknown":
+            row["crime_type"] = inferred_type
+
+    if not row.get("incident_date"):
+        inferred_date = extract_incident_date(combined)
+        if inferred_date:
+            row["incident_date"] = inferred_date.isoformat()
+
+    return row
+
+
 def _ingest_spreadsheet_rows(db: Session, rows: list[dict]) -> tuple[list[CrimeRecord], int]:
     records: list[CrimeRecordCreate] = []
     skipped = 0
     for row in rows:
+        row = _enrich_row_from_text(row)
         fir = str(row.get("fir_number", "")).strip()
         if not fir:
             skipped += 1
@@ -73,15 +113,29 @@ def _ingest_spreadsheet_rows(db: Session, rows: list[dict]) -> tuple[list[CrimeR
         if db.query(CrimeRecord).filter(CrimeRecord.fir_number == fir).first():
             skipped += 1
             continue
+
+        incident_date = row.get("incident_date")
+        if isinstance(incident_date, str) and incident_date:
+            from datetime import datetime
+            parsed_date = None
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                try:
+                    parsed_date = datetime.strptime(incident_date[:10], fmt).date()
+                    break
+                except ValueError:
+                    continue
+            incident_date = parsed_date
+
         records.append(
             CrimeRecordCreate(
                 fir_number=fir,
-                crime_type=str(row.get("crime_type", "unknown")),
+                crime_type=str(row.get("crime_type", "Unknown")),
                 description=str(row.get("description", "")) or None,
-                district=str(row.get("district", "unknown")),
+                district=str(row.get("district", "Unknown")),
                 police_station=str(row.get("police_station", "")) or None,
                 latitude=float(row["latitude"]) if row.get("latitude") not in (None, "") else None,
                 longitude=float(row["longitude"]) if row.get("longitude") not in (None, "") else None,
+                incident_date=incident_date,
                 status=str(row.get("status", "open")),
             )
         )
