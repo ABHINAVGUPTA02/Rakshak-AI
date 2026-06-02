@@ -1,46 +1,55 @@
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.db.neo4j import neo4j_session
 from app.models.crime import CrimeRecord, Person
 
+logger = logging.getLogger(__name__)
 
-def sync_crime_to_graph(db: Session, crime_id: int) -> None:
+
+def sync_crime_to_graph(db: Session, crime_id: int) -> bool:
     crime = db.query(CrimeRecord).filter(CrimeRecord.id == crime_id).first()
     if not crime:
-        return
+        return False
 
-    with neo4j_session() as session:
-        session.run(
-            """
-            MERGE (c:Crime {fir_number: $fir_number})
-            SET c.crime_type = $crime_type,
-                c.district = $district,
-                c.status = $status,
-                c.description = $description
-            MERGE (l:Location {name: $district})
-            MERGE (c)-[:OCCURRED_IN]->(l)
-            """,
-            fir_number=crime.fir_number,
-            crime_type=crime.crime_type,
-            district=crime.district,
-            status=crime.status,
-            description=crime.description or "",
-        )
-
-        for person in crime.persons:
+    try:
+        with neo4j_session() as session:
             session.run(
                 """
-                MERGE (p:Person {name: $name, role: $role})
-                SET p.age = $age
-                WITH p
-                MATCH (c:Crime {fir_number: $fir_number})
-                MERGE (p)-[:INVOLVED_IN {role: $role}]->(c)
+                MERGE (c:Crime {fir_number: $fir_number})
+                SET c.crime_type = $crime_type,
+                    c.district = $district,
+                    c.status = $status,
+                    c.description = $description
+                MERGE (l:Location {name: $district})
+                MERGE (c)-[:OCCURRED_IN]->(l)
                 """,
-                name=person.name,
-                role=person.role.value,
-                age=person.age,
                 fir_number=crime.fir_number,
+                crime_type=crime.crime_type,
+                district=crime.district,
+                status=crime.status,
+                description=crime.description or "",
             )
+
+            for person in crime.persons:
+                session.run(
+                    """
+                    MERGE (p:Person {name: $name, role: $role})
+                    SET p.age = $age
+                    WITH p
+                    MATCH (c:Crime {fir_number: $fir_number})
+                    MERGE (p)-[:INVOLVED_IN {role: $role}]->(c)
+                    """,
+                    name=person.name,
+                    role=person.role.value,
+                    age=person.age,
+                    fir_number=crime.fir_number,
+                )
+        return True
+    except Exception as exc:
+        logger.warning("Neo4j sync failed for crime %s: %s", crime.fir_number, exc)
+        return False
 
 
 def sync_all_crimes(db: Session) -> int:

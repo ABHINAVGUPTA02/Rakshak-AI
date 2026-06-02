@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.crime import CrimeRecord
 from app.schemas.chat import ChatResponse, EvidenceItem
+from app.services.intelligence.crime_search import format_crime_for_chat, get_recent_crimes, search_crimes
 
 
 def get_crime_stats(db: Session) -> dict:
@@ -46,10 +47,52 @@ def get_hotspots(db: Session) -> list[dict]:
 
 
 def answer_query(db: Session, message: str, language: str = "en") -> ChatResponse:
-    """Rule-based assistant until LLM key is configured."""
     stats = get_crime_stats(db)
     message_lower = message.lower()
     evidence: list[EvidenceItem] = []
+
+    # Search live DB records first (includes OCR-uploaded FIRs)
+    search_triggers = [
+        "fir", "case", "record", "upload", "recent", "latest", "complainant",
+        "accused", "victim", "describe", "detail", "summary", "search", "find",
+    ]
+    matched = search_crimes(db, message)
+    if matched and (
+        any(t in message_lower for t in search_triggers)
+        or len(_message_keywords(message)) >= 2
+    ):
+        lines = [f"- {format_crime_for_chat(crime)}" for crime in matched]
+        reply = f"Found {len(matched)} matching record(s) in the database:\n" + "\n".join(lines)
+        evidence = [
+            EvidenceItem(source="PostgreSQL", detail=f"{crime.fir_number} — {crime.crime_type}")
+            for crime in matched
+        ]
+        return ChatResponse(
+            reply=reply,
+            evidence=evidence,
+            suggested_queries=[
+                "Show recent FIR uploads",
+                "What are the most common crime types?",
+                "Show crime hotspots by district",
+            ],
+        )
+
+    if any(word in message_lower for word in ["recent", "latest", "uploaded", "new"]):
+        recent = get_recent_crimes(db)
+        if not recent:
+            reply = "No crime records in the database yet. Upload FIRs via Crime Records."
+        else:
+            lines = [f"- {format_crime_for_chat(crime)}" for crime in recent]
+            reply = f"Most recent {len(recent)} record(s):\n" + "\n".join(lines)
+            evidence = [
+                EvidenceItem(source="PostgreSQL", detail=f"{crime.fir_number} — {crime.crime_type}")
+                for crime in recent
+            ]
+        return ChatResponse(
+            reply=reply,
+            evidence=evidence,
+            suggested_queries=["Search by FIR number", "Show crime hotspots by district"],
+        )
 
     if any(word in message_lower for word in ["hotspot", "map", "district", "location"]):
         hotspots = get_hotspots(db)
@@ -86,7 +129,8 @@ def answer_query(db: Session, message: str, language: str = "en") -> ChatRespons
     else:
         reply = (
             f"Rakshak AI Intelligence Assistant. I have access to {stats['total_crimes']} crime records "
-            f"({stats['open_cases']} open cases). Ask about hotspots, crime types, networks, or case summaries."
+            f"({stats['open_cases']} open cases). Ask about specific FIRs, recent uploads, hotspots, "
+            "crime types, or networks."
         )
 
     if settings.openai_api_key:
@@ -96,8 +140,16 @@ def answer_query(db: Session, message: str, language: str = "en") -> ChatRespons
         reply=reply,
         evidence=evidence,
         suggested_queries=[
+            "Show recent FIR uploads",
             "Show crime hotspots by district",
             "What are the most common crime types?",
-            "Find criminal network connections",
         ],
     )
+
+
+def _message_keywords(message: str) -> list[str]:
+    import re
+
+    stop = {"a", "an", "the", "is", "are", "what", "who", "how", "when", "where", "tell", "me", "about"}
+    tokens = re.findall(r"[A-Za-z0-9/\-]{3,}", message.lower())
+    return [t for t in tokens if t not in stop]

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,19 +8,14 @@ from app.api.v1.router import api_router
 from app.config import settings
 from app.db.neo4j import close_neo4j_driver
 from app.db.postgres import Base, engine
-from app.services.seed import seed_sample_data
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Rakshak AI starting — database: %s", settings.database_label)
     Base.metadata.create_all(bind=engine)
-    from app.db.postgres import SessionLocal
-
-    db = SessionLocal()
-    try:
-        seed_sample_data(db)
-    finally:
-        db.close()
     yield
     close_neo4j_driver()
 
