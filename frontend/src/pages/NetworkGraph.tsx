@@ -5,6 +5,8 @@ const NODE_COLORS: Record<string, string> = {
   crime: '#ef4444',
   person: '#3b82f6',
   location: '#22c55e',
+  policestation: '#f59e0b',
+  crimetype: '#a855f7',
 };
 
 export default function NetworkGraph() {
@@ -34,7 +36,7 @@ export default function NetworkGraph() {
       <header className="page-header">
         <div>
           <h2>Criminal Network Graph</h2>
-          <p>Knowledge graph relationships — offenders, crimes, locations</p>
+          <p>Knowledge graph — crimes, persons, locations, police stations, crime types</p>
         </div>
       </header>
 
@@ -69,12 +71,14 @@ export default function NetworkGraph() {
                 <circle
                   cx={node.x}
                   cy={node.y}
-                  r={node.type === 'crime' ? 18 : 14}
+                  r={node.type === 'crime' ? 18 : node.type === 'crimetype' ? 16 : 14}
                   fill={NODE_COLORS[node.type] || '#94a3b8'}
                   opacity={0.85}
                 />
                 <text x={node.x} y={node.y + 30} fill="#e2e8f0" fontSize={10} textAnchor="middle">
-                  {node.label.length > 16 ? node.label.slice(0, 14) + '…' : node.label}
+                  {node.label.length > (node.type === 'person' ? 22 : 16)
+                    ? node.label.slice(0, node.type === 'person' ? 20 : 14) + '…'
+                    : node.label}
                 </text>
               </g>
             ))}
@@ -85,6 +89,8 @@ export default function NetworkGraph() {
           <span><i style={{ background: NODE_COLORS.crime }} /> Crime</span>
           <span><i style={{ background: NODE_COLORS.person }} /> Person</span>
           <span><i style={{ background: NODE_COLORS.location }} /> Location</span>
+          <span><i style={{ background: NODE_COLORS.policestation }} /> Police Station</span>
+          <span><i style={{ background: NODE_COLORS.crimetype }} /> Crime Type</span>
         </div>
       </div>
     </div>

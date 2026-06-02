@@ -47,6 +47,10 @@ GLUE_FIXES = [
     (r"(\w)(Crime\s*No\s*:)", r"\1 \2"),
     (r"(\w)(FIR\s*Date\s*:)", r"\1 \2"),
     (r"(\w)(PS\s*:)", r"\1 \2"),
+    (r"Accused(Adult|Minor)(Male|Female)", r"Accused \1 \2"),
+    (r"Sl\.No\.(\d+)([A-Za-z])", r"Sl.No.\1 \2"),
+    (r"(Male|Female)([A-Z#])", r"\1 \2"),
+    (r"Complainant/Informant", "Complainant/Informant"),
 ]
 
 
