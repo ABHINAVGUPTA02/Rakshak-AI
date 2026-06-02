@@ -26,6 +26,9 @@ export default function CrimeMap() {
 
       <div className="map-layout">
         <div className="panel map-canvas">
+          {hotspots.length === 0 ? (
+            <p className="empty-state">No mappable crimes yet. Upload FIRs or CSV records with district/location data.</p>
+          ) : (
           <div className="map-grid">
             {hotspots.map((spot) => {
               const intensity = spot.crime_count / maxCount;
@@ -52,7 +55,8 @@ export default function CrimeMap() {
               );
             })}
           </div>
-          <p className="map-note">Karnataka district crime density (sample data)</p>
+          )}
+          <p className="map-note">Karnataka crime density — uses GPS when available, otherwise district / police station location</p>
         </div>
 
         <div className="panel hotspot-list">

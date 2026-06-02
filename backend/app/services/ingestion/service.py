@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models.crime import CrimeRecord, Person, PersonRole
 from app.schemas.crime import CrimeRecordCreate
+from app.services.enrichment.geocoding import enrich_record_coordinates
 from app.services.enrichment.graph_sync import sync_crime_to_graph
 from app.services.ingestion.fir_parser import (
     extract_district,
@@ -33,14 +34,21 @@ def parse_excel(content: bytes) -> list[dict]:
 def ingest_crime_records(db: Session, records: list[CrimeRecordCreate]) -> list[CrimeRecord]:
     created: list[CrimeRecord] = []
     for record in records:
+        lat, lon = enrich_record_coordinates(
+            record.latitude,
+            record.longitude,
+            district=record.district,
+            police_station=record.police_station,
+            description=record.description,
+        )
         crime = CrimeRecord(
             fir_number=record.fir_number,
             crime_type=record.crime_type,
             description=record.description,
             district=record.district,
             police_station=record.police_station,
-            latitude=record.latitude,
-            longitude=record.longitude,
+            latitude=lat,
+            longitude=lon,
             incident_date=record.incident_date,
             status=record.status,
         )

@@ -8,6 +8,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.crime import CrimeRecord, Person
+from app.services.enrichment.geocoding import resolve_coordinates
 from app.services.intelligence.crime_search import format_crime_for_chat, get_recent_crimes, search_crimes
 
 
@@ -25,26 +26,63 @@ def get_crime_stats(db: Session) -> dict:
 
 
 def get_hotspots(db: Session) -> list[dict]:
-    rows = (
-        db.query(
-            CrimeRecord.district,
-            func.avg(CrimeRecord.latitude),
-            func.avg(CrimeRecord.longitude),
-            func.count(CrimeRecord.id),
+    """Aggregate crime hotspots using explicit coords or geocoded location fallback."""
+    crimes = db.query(CrimeRecord).all()
+    buckets: dict[str, dict] = {}
+
+    for crime in crimes:
+        district = (crime.district or "Unknown").strip()
+        if district.lower() in {"unknown", "na", "n/a", ""}:
+            district = "Unknown"
+
+        lat, lon, source = resolve_coordinates(
+            crime.latitude,
+            crime.longitude,
+            district=crime.district,
+            police_station=crime.police_station,
+            description=crime.description,
         )
-        .filter(CrimeRecord.latitude.isnot(None), CrimeRecord.longitude.isnot(None))
-        .group_by(CrimeRecord.district)
-        .all()
-    )
-    return [
-        {
-            "district": row[0],
-            "latitude": float(row[1]),
-            "longitude": float(row[2]),
-            "crime_count": row[3],
-        }
-        for row in rows
-    ]
+        if lat is None or lon is None:
+            continue
+
+        bucket = buckets.setdefault(
+            district,
+            {
+                "district": district,
+                "explicit_lats": [],
+                "explicit_lons": [],
+                "geocoded_lats": [],
+                "geocoded_lons": [],
+                "crime_count": 0,
+            },
+        )
+        bucket["crime_count"] += 1
+        if source == "explicit":
+            bucket["explicit_lats"].append(lat)
+            bucket["explicit_lons"].append(lon)
+        else:
+            bucket["geocoded_lats"].append(lat)
+            bucket["geocoded_lons"].append(lon)
+
+    hotspots: list[dict] = []
+    for bucket in buckets.values():
+        if bucket["explicit_lats"]:
+            latitude = sum(bucket["explicit_lats"]) / len(bucket["explicit_lats"])
+            longitude = sum(bucket["explicit_lons"]) / len(bucket["explicit_lons"])
+        else:
+            latitude = sum(bucket["geocoded_lats"]) / len(bucket["geocoded_lats"])
+            longitude = sum(bucket["geocoded_lons"]) / len(bucket["geocoded_lons"])
+
+        hotspots.append(
+            {
+                "district": bucket["district"],
+                "latitude": latitude,
+                "longitude": longitude,
+                "crime_count": bucket["crime_count"],
+            }
+        )
+
+    return sorted(hotspots, key=lambda h: h["crime_count"], reverse=True)
 
 
 def _search_persons(db: Session, message: str, limit: int = 5) -> list[CrimeRecord]:
